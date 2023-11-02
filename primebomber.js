@@ -54,6 +54,39 @@ process.on('SIGINT', () => {
     });
 });
 
+// Command: /start
+bot.onText(/\/start/, (msg) => {
+    const userId = msg.from.id.toString();
+    const chatId = msg.chat.id;
+
+    // Check if the user already exists in the database
+    db.get("SELECT id FROM users WHERE id = ?", [userId], (err, row) => {
+        if (err) {
+            bot.sendMessage(chatId, "An error occurred while accessing the database. Please try again later.");
+            console.error(err.message);
+            return;
+        }
+
+        // If the user does not exist, create a new user record
+        if (!row) {
+            db.run("INSERT INTO users (id, credits, emails_sent_today, total_emails_sent) VALUES (?, 0, 0, 0)", [userId], (err) => {
+                if (err) {
+                    bot.sendMessage(chatId, "An error occurred while creating your account. Please try again later.");
+                    console.error(err.message);
+                    return;
+                }
+
+                // Welcome message for a new user
+                bot.sendMessage(chatId, "Welcome! Your account has been created. Use /help to see available commands.");
+            });
+        } else {
+            // Welcome back message for existing users
+            bot.sendMessage(chatId, "Welcome back! Use /help to see available commands.");
+        }
+    });
+});
+
+
 // Command: /send
 bot.onText(/\/send/, (msg) => {
     const userId = msg.from.id.toString();
