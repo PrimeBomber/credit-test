@@ -40,6 +40,13 @@ function initializeDatabase() {
                 redeemed_at DATETIME
             )
         `);
+        db.run(`CREATE TABLE IF NOT EXISTS keys (
+            key TEXT PRIMARY KEY,
+            credits INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        
         db.run(`CREATE INDEX IF NOT EXISTS idx_redeemed_by ON keys (redeemed_by)`);
     });
 }
@@ -243,6 +250,53 @@ function generateKey() {
     }
     return key;
 }
+
+bot.onText(/\/redeem (.+)/, (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id.toString();
+    const redeemKey = match[1];
+
+    if (!redeemKey) {
+        bot.sendMessage(chatId, "Please provide a valid key to redeem.");
+        return;
+    }
+
+    // Start by checking if the key exists and is valid
+    db.get("SELECT * FROM keys WHERE key = ?", [redeemKey], (err, keyRow) => {
+        if (err) {
+            bot.sendMessage(chatId, "There was an error checking the key. Please try again later.");
+            return;
+        }
+
+        if (!keyRow) {
+            bot.sendMessage(chatId, "The key provided is not valid or has already been used.");
+            return;
+        }
+
+        // Key is valid, add credits to user
+        db.run("BEGIN TRANSACTION");
+        db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [keyRow.credits, userId], (updateErr) => {
+            if (updateErr) {
+                bot.sendMessage(chatId, "There was an error crediting your account. Please try again later.");
+                db.run("ROLLBACK");
+                return;
+            }
+
+            // Remove the key so it can't be used again
+            db.run("DELETE FROM keys WHERE key = ?", [redeemKey], (deleteErr) => {
+                if (deleteErr) {
+                    bot.sendMessage(chatId, "There was an error finalizing the redemption process. Please contact support.");
+                    db.run("ROLLBACK");
+                    return;
+                }
+
+                db.run("COMMIT");
+                bot.sendMessage(chatId, `Successfully added ${keyRow.credits} credits to your account.`);
+            });
+        });
+    });
+});
+
 
 // ... Rest of the bot.onText callbacks for handling various commands
 
