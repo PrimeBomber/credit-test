@@ -104,12 +104,6 @@ bot.onText(/\/send/, (msg) => {
 
         // Removed subscription check - replaced with credit system
 
-        // Check if user hasn't sent more than the daily limit of emails
-        if (user.emails_sent_today >= 1000) {
-            bot.sendMessage(chatId, "You've reached your daily limit of 1000 emails. Please wait until tomorrow.");
-            return;
-        }
-
         bot.sendMessage(chatId, "Please enter the target email address:");
         db.run("INSERT OR REPLACE INTO steps (userId, step, email_attempts) VALUES (?, 'input_email', 0)", [userId]);
     });
@@ -190,6 +184,27 @@ bot.onText(/.*/, async (msg) => {
                 });
                 break;
         }
+    });
+});
+
+bot.onText(/\/info/, (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id.toString();
+
+    db.get("SELECT credits, total_emails_sent FROM users WHERE id = ?", [userId], (err, user) => {
+        if (err) {
+            bot.sendMessage(chatId, "There was an error retrieving your information. Please try again later.");
+            return;
+        }
+
+        if (!user) {
+            bot.sendMessage(chatId, "Your account is not registered. Please start with /start.");
+            return;
+        }
+
+        const creditInfo = `Credits available: ${user.credits}`;
+        const emailInfo = `Total emails sent: ${user.total_emails_sent}`;
+        bot.sendMessage(chatId, `${creditInfo}\n${emailInfo}`);
     });
 });
 
