@@ -190,6 +190,11 @@ bot.onText(/.*/, async (msg) => {
                     });
                 });
                 break;
+
+                function validateEmail(email) {
+                const re = /^[\w.-]+@[\w.-]+\.\w+$/;
+                return re.test(email);
+                }
         }
     });
 });
