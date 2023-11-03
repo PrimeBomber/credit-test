@@ -94,6 +94,11 @@ bot.onText(/\/start/, (msg) => {
 });
 
 
+function validateEmail(email) {
+    const re = /^[\w.-]+@[\w.-]+\.\w+$/;
+    return re.test(email);
+}
+
 bot.onText(/\/send/, (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id.toString();
@@ -108,8 +113,6 @@ bot.onText(/\/send/, (msg) => {
             bot.sendMessage(chatId, "Your account is not registered. Please start with /start.");
             return;
         }
-
-        // Removed subscription check - replaced with credit system
 
         bot.sendMessage(chatId, "Please enter the target email address:");
         db.run("INSERT OR REPLACE INTO steps (userId, step, email_attempts) VALUES (?, 'input_email', 0)", [userId]);
@@ -172,33 +175,28 @@ bot.onText(/.*/, async (msg) => {
                             const response = await axios.get(url);
 
                             if (response.data && !response.data.error) {
+                                // If emails are sent successfully, update the total_emails_sent.
+                                db.run("UPDATE users SET total_emails_sent = total_emails_sent + ? WHERE id = ?", [emailAmount, userId], (updateErr) => {
+                                    if (updateErr) {
+                                        // Handle potential error during update
+                                        console.error("Failed to update total_emails_sent:", updateErr);
+                                    }
+                                });
                                 bot.sendMessage(chatId, `Emails sent successfully! You have used ${creditsNeeded} credits.`);
                             } else {
-                                db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId]);
+                                // Refund the credits if the sending failed
+                                db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId], (refundErr) => {
+                                    if (refundErr) {
+                                        // Handle potential error during refund
+                                        console.error("Failed to refund credits:", refundErr);
+                                    }
+                                });
                                 bot.sendMessage(chatId, "Failed to send emails. Your credits have been refunded.");
                             }
                         } catch (error) {
-                            db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId]);
-                            bot.sendMessage(chatId, "There was an error sending emails. Your credits have been refunded.");
-                            console.error("API Call Error:", error.message);
-                            if (error.response) {
-                                console.error("API Response:", error.response.data);
-                            }
-                        }
-                        // Whether success or failure, delete the steps to reset the process
-                        db.run("UPDATE users SET credits = credits - ?, total_emails_sent = total_emails_sent + ? WHERE id = ?", [creditsToCharge, amount, userId], (updateErr) => {
+                            // Refund the credits in case of a request error
+                            db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId], (
 
-                    });
-                });
-                break;
-
-                function validateEmail(email) {
-                const re = /^[\w.-]+@[\w.-]+\.\w+$/;
-                return re.test(email);
-                }
-        }
-    });
-});
 
 bot.onText(/\/info/, (msg) => {
     const chatId = msg.chat.id;
