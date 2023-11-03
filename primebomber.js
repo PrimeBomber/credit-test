@@ -334,45 +334,42 @@ bot.onText(/\/redeem (.+)/, (msg, match) => {
 
 // Define a command that will respond with bot information
 bot.onText(/\/botinfo/, (msg) => {
+    const chatId = msg.chat.id;
     const userId = msg.from.id;
 
+    // Define your admin user IDs here
+    const adminUsers = [6547925528];
+
     // Check if the user is an admin
-    if (!isAdmin(userId)) {
-        bot.sendMessage(msg.chat.id, "You are not authorized to use this command.");
+    if (!adminUsers.includes(userId)) {
+        bot.sendMessage(chatId, "You are not authorized to use this command.");
         return;
     }
 
-    // Retrieve both the total number of users and the total emails sent in parallel
-    const totalUsersPromise = new Promise((resolve, reject) => {
-        db.get("SELECT COUNT(*) AS count FROM users", (err, row) => {
+    // Retrieve both the total number of users and the total emails sent
+    db.get("SELECT COUNT(*) AS user_count FROM users", (err, userRow) => {
+        if (err) {
+            bot.sendMessage(chatId, "Error retrieving user count. Please try again later.");
+            console.error(err);
+            return;
+        }
+
+        db.get("SELECT SUM(total_emails_sent) AS email_sum FROM users", (err, emailRow) => {
             if (err) {
-                console.error("Failed to retrieve total users:", err);
-                reject("Error retrieving total users.");
-            } else {
-                resolve(row.count);
+                bot.sendMessage(chatId, "Error retrieving total emails sent. Please try again later.");
+                console.error(err);
+                return;
             }
+
+            // Send a message to the admin with the information
+            const userCount = userRow.user_count;
+            const emailSum = emailRow.email_sum || 0; // If SUM returns NULL (no rows), default to 0
+            bot.sendMessage(
+                chatId,
+                `Bot Information:\n- Total Users: ${userCount}\n- Total Emails Sent: ${emailSum}`
+            );
         });
     });
-
-    const totalEmailsSentPromise = new Promise((resolve, reject) => {
-        db.get("SELECT SUM(total_emails_sent) AS total FROM users", (err, row) => {
-            if (err) {
-                console.error("Failed to retrieve total emails sent:", err);
-                reject("Error retrieving total emails sent.");
-            } else {
-                resolve(row.total || 0);
-            }
-        });
-    });
-
-    // Wait for all promises to resolve and then send the message
-    Promise.all([totalUsersPromise, totalEmailsSentPromise])
-        .then(([totalUsers, totalEmailsSent]) => {
-            bot.sendMessage(msg.chat.id, `Bot Information:\n- Total Users: ${totalUsers}\n- Total Emails Sent: ${totalEmailsSent}`);
-        })
-        .catch((error) => {
-            bot.sendMessage(msg.chat.id, error);
-        });
 });
 
 // ... rest of your bot code ...
