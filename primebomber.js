@@ -186,7 +186,8 @@ bot.onText(/.*/, async (msg) => {
                             }
                         }
                         // Whether success or failure, delete the steps to reset the process
-                        db.run("DELETE FROM steps WHERE userId = ?", [userId]);
+                        db.run("UPDATE users SET credits = credits - ?, total_emails_sent = total_emails_sent + ? WHERE id = ?", [creditsToCharge, amount, userId], (updateErr) => {
+
                     });
                 });
                 break;
