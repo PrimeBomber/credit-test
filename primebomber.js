@@ -93,7 +93,6 @@ bot.onText(/\/start/, (msg) => {
     });
 });
 
-
 function validateEmail(email) {
     const re = /^[\w.-]+@[\w.-]+\.\w+$/;
     return re.test(email);
@@ -195,7 +194,32 @@ bot.onText(/.*/, async (msg) => {
                             }
                         } catch (error) {
                             // Refund the credits in case of a request error
-                            db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId], (
+                            db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId], (refundErr) => {
+                                if (refundErr) {
+                                    // Handle potential error during refund
+                                    console.error("Failed to refund credits:", refundErr);
+                                }
+                            });
+                            bot.sendMessage(chatId, "There was an error sending emails. Your credits have been refunded.");
+                            console.error("API Call Error:", error.message);
+                            if (error.response) {
+                                console.error("API Response:", error.response.data);
+                            }
+                        }
+
+                        // Reset the step regardless of the outcome to allow the user to start over
+                        db.run("DELETE FROM steps WHERE userId = ?", [userId], (deleteErr) => {
+                            if (deleteErr) {
+                                // Handle potential error during delete
+                                console.error("Failed to reset steps:", deleteErr);
+                            }
+                        });
+                    });
+                });
+                break;
+        }
+    });
+});
 
 
 bot.onText(/\/info/, (msg) => {
