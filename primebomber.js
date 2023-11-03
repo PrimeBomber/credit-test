@@ -14,6 +14,10 @@ const db = new sqlite3.Database(dbFile, (err) => {
     initializeDatabase();
 });
 
+function isAdmin(userId) {
+    return adminIds.includes(userId);
+}
+
 function initializeDatabase() {
     db.serialize(() => {
         db.run(`
@@ -327,6 +331,52 @@ bot.onText(/\/redeem (.+)/, (msg, match) => {
 
 
 // ... Rest of the bot.onText callbacks for handling various commands
+
+// Define a command that will respond with bot information
+bot.onText(/\/botinfo/, (msg) => {
+    const userId = msg.from.id;
+
+    // Check if the user is an admin
+    if (!isAdmin(userId)) {
+        bot.sendMessage(msg.chat.id, "You are not authorized to use this command.");
+        return;
+    }
+
+    // Retrieve both the total number of users and the total emails sent in parallel
+    const totalUsersPromise = new Promise((resolve, reject) => {
+        db.get("SELECT COUNT(*) AS count FROM users", (err, row) => {
+            if (err) {
+                console.error("Failed to retrieve total users:", err);
+                reject("Error retrieving total users.");
+            } else {
+                resolve(row.count);
+            }
+        });
+    });
+
+    const totalEmailsSentPromise = new Promise((resolve, reject) => {
+        db.get("SELECT SUM(total_emails_sent) AS total FROM users", (err, row) => {
+            if (err) {
+                console.error("Failed to retrieve total emails sent:", err);
+                reject("Error retrieving total emails sent.");
+            } else {
+                resolve(row.total || 0);
+            }
+        });
+    });
+
+    // Wait for all promises to resolve and then send the message
+    Promise.all([totalUsersPromise, totalEmailsSentPromise])
+        .then(([totalUsers, totalEmailsSent]) => {
+            bot.sendMessage(msg.chat.id, `Bot Information:\n- Total Users: ${totalUsers}\n- Total Emails Sent: ${totalEmailsSent}`);
+        })
+        .catch((error) => {
+            bot.sendMessage(msg.chat.id, error);
+        });
+});
+
+// ... rest of your bot code ...
+
 
 // Remember to close the database when the bot shuts down
 process.on('SIGINT', () => {
