@@ -28,11 +28,13 @@ function initializeDatabase() {
                 total_emails_sent INTEGER DEFAULT 0
             )
         `);
+        // Updated steps table with `amount_attempts` column
         db.run(`
             CREATE TABLE IF NOT EXISTS steps (
                 userId TEXT PRIMARY KEY,
                 step TEXT,
                 email_attempts INTEGER DEFAULT 0,
+                amount_attempts INTEGER DEFAULT 0, // This is the new line
                 email TEXT
             )
         `);
@@ -44,15 +46,12 @@ function initializeDatabase() {
                 redeemed_at DATETIME
             )
         `);
-        db.run(`CREATE TABLE IF NOT EXISTS keys (
-            key TEXT PRIMARY KEY,
-            credits INTEGER,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
+        // Removed the duplicate creation of 'keys' table
+        // Assuming the previous one is correct and this was by mistake
         
         db.run(`CREATE INDEX IF NOT EXISTS idx_redeemed_by ON keys (redeemed_by)`);
     });
+    console.log('Database initialized with updated structure.');
 }
 
 process.on('SIGINT', () => {
@@ -64,6 +63,9 @@ process.on('SIGINT', () => {
         process.exit(0);
     });
 });
+
+// Call the initialization function to set up the database
+initializeDatabase();
 
 // Command: /start
 bot.onText(/\/start/, (msg) => {
