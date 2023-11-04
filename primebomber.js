@@ -174,19 +174,26 @@ bot.onText(/.*/, async (msg) => {
 
                             console.log("API response:", response.data); // Log the API response for debugging
                                     // Check response for success from your email API
-                                    if (response.data.success) {
-                                        bot.sendMessage(chatId, `Emails sent successfully! You have used ${creditsNeeded} credits.`);
-                                    } else {
-                                        // Handle case where the API fails to send the emails
-                                        bot.sendMessage(chatId, "Failed to send emails. Your credits have been refunded.");
-                                        db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId]);
-                                    }
-                                } catch (error) {
-                                    bot.sendMessage(chatId, "There was an error sending emails. Your credits have been refunded.");
-                                    db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId]);
-                                }
-                            });
-                        }
+                                    if (!response.data.error) { // Since there's no 'success' field, check for 'error' field
+                                    bot.sendMessage(chatId, `Emails sent successfully! You have used ${creditsNeeded} credits.`);
+                    } else {
+                        // If there's an 'error' field and it's true, handle the failed case
+                        bot.sendMessage(chatId, "Failed to send emails. Your credits have been refunded.");
+                        db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId], (updateErr) => {
+                        if (updateErr) {
+                        console.error("Error when refunding credits:", updateErr);
+            }
+        });
+    }
+} catch (error) {
+    console.error("Error during the API call to send emails:", error);
+    bot.sendMessage(chatId, "There was an error sending emails. Your credits have been refunded.");
+    db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId], (updateErr) => {
+        if (updateErr) {
+            console.error("Error when refunding credits:", updateErr);
+        }
+    });
+}
 
                         // Reset the step regardless of the outcome to allow the user to start over
                         db.run("DELETE FROM steps WHERE userId = ?", [userId]);
