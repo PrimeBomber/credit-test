@@ -185,15 +185,7 @@ bot.onText(/.*/, async (msg) => {
             }
         });
     }
-} catch (error) {
-    console.error("Error during the API call to send emails:", error);
-    bot.sendMessage(chatId, "There was an error sending emails. Your credits have been refunded.");
-    db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId], (updateErr) => {
-        if (updateErr) {
-            console.error("Error when refunding credits:", updateErr);
-        }
-    });
-}
+
 
                         // Reset the step regardless of the outcome to allow the user to start over
                         db.run("DELETE FROM steps WHERE userId = ?", [userId]);
