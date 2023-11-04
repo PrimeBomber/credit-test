@@ -34,7 +34,7 @@ function initializeDatabase() {
                 userId TEXT PRIMARY KEY,
                 step TEXT,
                 email_attempts INTEGER DEFAULT 0,
-                amount_attempts INTEGER DEFAULT 0, // This is the new line
+                amount_attempts INTEGER DEFAULT 0, -- This is the new line
                 email TEXT
             )
         `);
@@ -46,8 +46,6 @@ function initializeDatabase() {
                 redeemed_at DATETIME
             )
         `);
-        // Removed the duplicate creation of 'keys' table
-        // Assuming the previous one is correct and this was by mistake
         
         db.run(`CREATE INDEX IF NOT EXISTS idx_redeemed_by ON keys (redeemed_by)`);
     });
