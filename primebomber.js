@@ -54,16 +54,6 @@ function initializeDatabase() {
     console.log('Database initialized with updated structure.');
 }
 
-process.on('SIGINT', () => {
-    db.close((err) => {
-        if (err) {
-            return console.error(err.message);
-        }
-        console.log('Closed the database connection.');
-        process.exit(0);
-    });
-});
-
 // Call the initialization function to set up the database
 initializeDatabase();
 
