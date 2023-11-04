@@ -172,6 +172,7 @@ bot.onText(/.*/, async (msg) => {
                             const url = `https://strike.pw/api/v1/public/attack?key=${process.env.STRIKE_API_KEY}&target=${encodeURIComponent(row.email)}&mode=normal&amount=${emailAmount}`;
                             const response = await axios.get(url);
 
+                            console.log("API response:", response.data); // Log the API response for debugging
                                     // Check response for success from your email API
                                     if (response.data.success) {
                                         bot.sendMessage(chatId, `Emails sent successfully! You have used ${creditsNeeded} credits.`);
