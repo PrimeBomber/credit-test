@@ -141,10 +141,10 @@ bot.onText(/.*/, async (msg) => {
                 if (isNaN(emailAmount) || emailAmount < 10 || emailAmount > 1000) {
                     if (row.amount_attempts >= 1) {
                         bot.sendMessage(chatId, "Invalid amount entered twice. Process canceled.");
-                        db.run("DELETE FROM steps WHERE userId = ?", [userId]);
+                        db.run("DELETE FROM step WHERE userId = ?", [userId]);
                     } else {
                         bot.sendMessage(chatId, "Invalid amount entered. Please enter a value between 10 and 1000.");
-                        db.run("UPDATE steps SET amount_attempts = amount_attempts + 1 WHERE userId = ?", [userId]);
+                        db.run("UPDATE step SET amount_attempts = amount_attempts + 1 WHERE userId = ?", [userId]);
                     }
                 } else {
                     // Assuming 1 credit per email is needed
@@ -196,7 +196,7 @@ try {
 
 
                         // Reset the step regardless of the outcome to allow the user to start over
-                        db.run("DELETE FROM steps WHERE userId = ?", [userId]);
+                        db.run("DELETE FROM step WHERE userId = ?", [userId]);
                     });
                 }
                 break;
