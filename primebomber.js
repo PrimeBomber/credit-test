@@ -134,75 +134,62 @@ bot.onText(/.*/, async (msg) => {
                         db.run("UPDATE steps SET email_attempts = email_attempts + 1 WHERE userId = ?", [userId]);
                     }
                 }
-                break;
+                return;
 
             case 'input_amount':
                 const emailAmount = parseInt(text);
                 if (isNaN(emailAmount) || emailAmount < 10 || emailAmount > 1000) {
                     if (row.amount_attempts >= 1) {
                         bot.sendMessage(chatId, "Invalid amount entered twice. Process canceled.");
-                        db.run("DELETE FROM step WHERE userId = ?", [userId]);
+                        db.run("DELETE FROM steps WHERE userId = ?", [userId]);
                     } else {
-                        bot.sendMessage(chatId, "Invalid amount entered. Please enter a value between 10 and 1000.");
-                        db.run("UPDATE step SET amount_attempts = amount_attempts + 1 WHERE userId = ?", [userId]);
+                        bot.sendMessage(chatId, "Invalid amount. Please enter a value between 10 and 1000.");
+                        db.run("UPDATE steps SET amount_attempts = amount_attempts + 1 WHERE userId = ?", [userId]);
                     }
-                } else {
-                    // Assuming 1 credit per email is needed
-                    const creditsNeeded = emailAmount;
+                    return;
+                }
 
-                    db.get("SELECT credits FROM users WHERE id = ?", [userId], async (err, user) => {
-                        if (err || !user) {
-                            bot.sendMessage(chatId, "There was a problem retrieving your credit information.");
+                const creditsNeeded = emailAmount;
+                db.get("SELECT credits FROM users WHERE id = ?", [userId], async (err, user) => {
+                    if (err || !user) {
+                        bot.sendMessage(chatId, "There was a problem retrieving your credit information.");
+                        return;
+                    }
+
+                    if (creditsNeeded > user.credits) {
+                        bot.sendMessage(chatId, "You do not have enough credits to send this many emails. Please recharge.");
+                        return;
+                    }
+
+                    db.run("UPDATE users SET credits = credits - ? WHERE id = ?", [creditsNeeded, userId], async (error) => {
+                        if (error) {
+                            bot.sendMessage(chatId, "There was a problem updating your credits. Please try again.");
                             return;
                         }
 
-                        if (creditsNeeded > user.credits) {
-                            bot.sendMessage(chatId, "You do not have enough credits to send this many emails. Please recharge.");
-                        } else {
-                            // Deduct credits and attempt to send emails
-                            db.run("UPDATE users SET credits = credits - ? WHERE id = ?", [creditsNeeded, userId], async (error) => {
-                                if (error) {
-                                    bot.sendMessage(chatId, "There was a problem updating your credits. Please try again.");
-                                    return;
-                                }
+                        try {
+                            const url = `https://strike.pw/api/v1/public/attack?key=${process.env.STRIKE_API_KEY}&target=${encodeURIComponent(row.email)}&mode=normal&amount=${emailAmount}`;
+                            const response = await axios.get(url);
 
-// Now perform the API call to send the emails
-try {
-    const url = `https://strike.pw/api/v1/public/attack?key=${process.env.STRIKE_API_KEY}&target=${encodeURIComponent(row.email)}&mode=normal&amount=${emailAmount}`;
-    const response = await axios.get(url);
+                            console.log("API response:", response.data);
+                            if (!response.data.error) {
+                                bot.sendMessage(chatId, `Emails sent successfully! You have used ${creditsNeeded} credits.`);
+                            } else {
+                                bot.sendMessage(chatId, "Failed to send emails. Your credits have been refunded.");
+                                db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId]);
+                            }
+                        } catch (error) {
+                            console.error("Error during the API call to send emails:", error);
+                            bot.sendMessage(chatId, "There was an error sending emails. Your credits have been refunded.");
+                            db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId]);
+                        }
 
-    console.log("API response:", response.data); // Log the API response for debugging
-    // Check response for success from your email API
-    if (!response.data.error) { // Since there's no 'success' field, check for 'error' field
-        bot.sendMessage(chatId, `Emails sent successfully! You have used ${creditsNeeded} credits.`);
-    } else {
-        // If there's an 'error' field and it's true, handle the failed case
-        bot.sendMessage(chatId, "Failed to send emails. Your credits have been refunded.");
-        db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId], (updateErr) => {
-            if (updateErr) {
-                console.error("Error when refunding credits:", updateErr);
-            }
-        });
-    }
-} catch (error) {
-    console.error("Error during the API call to send emails:", error);
-    bot.sendMessage(chatId, "There was an error sending emails. Your credits have been refunded.");
-    db.run("UPDATE users SET credits = credits + ? WHERE id = ?", [creditsNeeded, userId], (updateErr) => {
-        if (updateErr) {
-            console.error("Error when refunding credits:", updateErr);
-        }
-    });
-}
-
-
-                        // Reset the step regardless of the outcome to allow the user to start over
-                        db.run("DELETE FROM step WHERE userId = ?", [userId]);
+                        db.run("DELETE FROM steps WHERE userId = ?", [userId]);
                     });
-                }
-                break;
+                });
+                return;
         }
     });
-    }
 });
 
 bot.onText(/\/info/, (msg) => {
