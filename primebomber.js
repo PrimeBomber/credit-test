@@ -202,6 +202,7 @@ try {
                 break;
         }
     });
+    }
 });
 
 bot.onText(/\/info/, (msg) => {
