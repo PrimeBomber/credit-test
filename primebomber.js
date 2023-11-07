@@ -173,6 +173,9 @@ bot.onText(/.*/, async (msg) => {
 
                             console.log("API response:", response.data);
                             if (!response.data.error) {
+                                db.run("UPDATE users SET total_emails_sent = total_emails_sent + ? WHERE id = ?", [emailAmount, userId], (updateErr) => {
+                            if (updateErr) {
+                                console.error("Error when updating total emails sent:", updateErr);
                                 bot.sendMessage(chatId, `Emails sent successfully! You have used ${creditsNeeded} credits.`);
                             } else {
                                 bot.sendMessage(chatId, "Failed to send emails. Your credits have been refunded.");
