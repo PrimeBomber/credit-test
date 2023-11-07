@@ -351,7 +351,25 @@ bot.onText(/\/botinfo/, (msg) => {
     });
 });
 
-// ... rest of your bot code ...
+bot.on('message', (msg) => {
+    const chatId = msg.chat.id;
+    const text = msg.text;
+
+    // Listen for the "/help" command
+    if (text === '/help') {
+        const helpMessage = `
+Here are the commands you can use:
+- /start -> Starts the Bot and gives you a brief introduction.
+- /send -> Initiates the email sending process.
+- /info -> Provides information about your profile.
+- /redeem -> Allows you to redeem a key to add credits to your account.
+
+Just type any of the above commands to get started!
+`;
+        bot.sendMessage(chatId, helpMessage);
+    }
+});
+
 
 
 // Remember to close the database when the bot shuts down
